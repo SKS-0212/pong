@@ -4,7 +4,7 @@ const PLAYER_WIDTH: f32 = 20.0;
 const PLAYER_HEIGHT: f32 = 80.0;
 
 #[derive(Debug)]
-struct Player {
+struct Paddle {
     x: f32,
     y: f32,
     w: f32,
@@ -12,7 +12,7 @@ struct Player {
     speed: f32,
 }
 
-impl Player {
+impl Paddle {
     fn update(&mut self) {
         if is_key_down(KeyCode::Up) {
             self.y = self.y - self.speed * get_frame_time();
@@ -69,18 +69,18 @@ impl Ball {
         draw_circle(self.x, self.y, self.radius, WHITE)
     }
 
-    fn bounce_off(&mut self, player: &Player){
-        if ball_hits_player(&self, &player){
+    fn bounce_off(&mut self, paddle: &Paddle){
+        if ball_hits_paddle(&self, &paddle){
 
-            if self.y < player.y{
+            if self.y < paddle.y{
                 self.vy = -self.vy.abs();
-                self.y = player.y - self.radius;
-            }else if self.y > player.y + player.h{
+                self.y = paddle.y - self.radius;
+            }else if self.y > paddle.y + paddle.h{
                 self.vy = self.vy.abs();
-                self.y = player.y +player.h+self.radius;
+                self.y = paddle.y +paddle.h+self.radius;
             }else{
                 self.vx = self.vx.abs();
-                self.x = player.x +player.w +self.radius;
+                self.x = paddle.x +paddle.w +self.radius;
             }
 
 
@@ -88,9 +88,9 @@ impl Ball {
     }
 }
 
-fn ball_hits_player(ball: &Ball, player: &Player) -> bool {
-    let closest_x = ball.x.clamp(player.x, player.x + player.w);
-    let closest_y = ball.y.clamp(player.y, player.y + player.h);
+fn ball_hits_paddle(ball: &Ball, paddle: &Paddle) -> bool {
+    let closest_x = ball.x.clamp(paddle.x, paddle.x + paddle.w);
+    let closest_y = ball.y.clamp(paddle.y, paddle.y + paddle.h);
 
     let dx = ball.x - closest_x;
     let dy = ball.y - closest_y;
@@ -104,7 +104,7 @@ fn ball_hits_player(ball: &Ball, player: &Player) -> bool {
 
 #[macroquad::main("My Game")]
 async fn main() {
-    let mut player = Player {
+    let mut paddle = Paddle {
         x: 20.0,
         y: (screen_height() - PLAYER_HEIGHT) / 2.0,
         w: PLAYER_WIDTH,
@@ -121,11 +121,11 @@ async fn main() {
     };
 
     loop {
-        player.update();
+        paddle.update();
         ball.update();
-        ball.bounce_off(&player);
+        ball.bounce_off(&paddle);
         clear_background(BLACK);
-        player.draw();
+        paddle.draw();
         ball.draw();
 
         next_frame().await;
