@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 
-const PLAYER_WIDTH: f32 = 20.0;
-const PLAYER_HEIGHT: f32 = 80.0;
+const PADDLE_WIDTH: f32 = 20.0;
+const PADDLE_HEIGHT: f32 = 80.0;
 
 #[derive(Debug)]
 struct Paddle {
@@ -13,16 +13,31 @@ struct Paddle {
 }
 
 impl Paddle {
-    fn update(&mut self) {
-        if is_key_down(KeyCode::Up) {
+    fn update(&mut self, up: KeyCode, down: KeyCode) {
+        if is_key_down(up) {
             self.y = self.y - self.speed * get_frame_time();
         }
 
-        if is_key_down(KeyCode::Down) {
+        if is_key_down(down) {
             self.y = self.y + self.speed * get_frame_time();
         }
 
         self.y = self.y.clamp(0.0, screen_height() - self.h);
+    }
+
+    fn follow(&mut self, target_y: f32){
+        let center = self.y + self.h / 2.0;
+        let distance = (target_y - center).abs();
+        let dead_zone = 5.0;
+        if distance < dead_zone {
+
+        }else if target_y < center {
+            self.y = self.y - self.speed * get_frame_time();
+        }else{
+            self.y = self.y + self.speed * get_frame_time();
+        }
+
+        self.y =self.y.clamp( 0.0, screen_height() - self.h);
     }
 
     fn draw(&self) {
@@ -79,8 +94,15 @@ impl Ball {
                 self.vy = self.vy.abs();
                 self.y = paddle.y +paddle.h+self.radius;
             }else{
-                self.vx = self.vx.abs();
-                self.x = paddle.x +paddle.w +self.radius;
+
+                if self.x < (paddle.x +paddle.w /2.0){
+                    self.vx = -self.vx.abs();
+                    self.x = paddle.x - self.radius;
+                }else{
+                    self.vx = self.vx.abs();
+                    self.x = paddle.x + paddle.w + self.radius;
+                }
+
             }
 
 
@@ -106,9 +128,9 @@ fn ball_hits_paddle(ball: &Ball, paddle: &Paddle) -> bool {
 async fn main() {
     let mut paddle = Paddle {
         x: 20.0,
-        y: (screen_height() - PLAYER_HEIGHT) / 2.0,
-        w: PLAYER_WIDTH,
-        h: PLAYER_HEIGHT,
+        y: (screen_height() - PADDLE_HEIGHT) / 2.0,
+        w: PADDLE_WIDTH,
+        h: PADDLE_HEIGHT,
         speed: 200.0,
     };
 
@@ -120,14 +142,25 @@ async fn main() {
         radius: 10.0,
     };
 
+    let mut opponent = Paddle{
+        x: screen_width() - PADDLE_WIDTH - 20.0,
+        y: (screen_height() - PADDLE_HEIGHT) /2.0,
+        w: PADDLE_WIDTH,
+        h: PADDLE_HEIGHT,
+        speed: 200.0
+    };
+
     loop {
-        paddle.update();
+        paddle.update(KeyCode::W, KeyCode::S);
+        opponent.follow(ball.y);
         ball.update();
         ball.bounce_off(&paddle);
+        ball.bounce_off(&opponent);
+
         clear_background(BLACK);
         paddle.draw();
+        opponent.draw();
         ball.draw();
-
         next_frame().await;
     }
 }
