@@ -3,7 +3,8 @@ use macroquad::prelude::*;
 // Paddles
 const PADDLE_WIDTH: f32 = 20.0;
 const PADDLE_HEIGHT: f32 = 80.0;
-const PADDLE_SPEED: f32 = 200.0;
+const PADDLE_SPEED: f32 = 300.0; // your paddle
+const OPPONENT_SPEED: f32 = 240.0; // a bit slower, so late in a rally it can miss
 const PADDLE_MARGIN: f32 = 20.0; // gap between a paddle and the screen edge
 const AI_DEAD_ZONE: f32 = 5.0; // bigger = lazier opponent
 
@@ -12,8 +13,8 @@ const BALL_RADIUS: f32 = 10.0;
 const BALL_START_SPEED_X: f32 = 150.0;
 const BALL_MIN_SPEED_Y: f32 = 60.0;
 const BALL_MAX_START_SPEED_Y: f32 = 140.0;
-const BALL_SPEEDUP: f32 = 1.1; // multiplier on every paddle hit
-const BALL_MAX_SPEED: f32 = 600.0; // stops the ball tunnelling through paddles
+const BALL_SPEEDUP: f32 = 1.05; // multiplier on every paddle hit
+const BALL_MAX_SPEED: f32 = 350.0; // per axis; stays catchable and stops tunnelling
 
 // Rules and text
 const WIN_SCORE: u32 = 5;
@@ -32,13 +33,13 @@ struct Paddle {
 }
 
 impl Paddle {
-    fn new(x: f32) -> Self {
+    fn new(x: f32, speed: f32) -> Self {
         Paddle {
             x,
             y: (screen_height() - PADDLE_HEIGHT) / 2.0,
             w: PADDLE_WIDTH,
             h: PADDLE_HEIGHT,
-            speed: PADDLE_SPEED,
+            speed,
         }
     }
 
@@ -182,6 +183,7 @@ fn ball_hits_paddle(ball: &Ball, paddle: &Paddle) -> bool {
 enum GameState {
     Menu,
     Playing,
+    Paused,
     GameOver,
 }
 
@@ -210,8 +212,11 @@ async fn main() {
     // Without a seed, the "random" numbers are the same every run.
     rand::srand(macroquad::miniquad::date::now() as u64);
 
-    let mut paddle = Paddle::new(PADDLE_MARGIN);
-    let mut opponent = Paddle::new(screen_width() - PADDLE_WIDTH - PADDLE_MARGIN);
+    let mut paddle = Paddle::new(PADDLE_MARGIN, PADDLE_SPEED);
+    let mut opponent = Paddle::new(
+        screen_width() - PADDLE_WIDTH - PADDLE_MARGIN,
+        OPPONENT_SPEED,
+    );
     let mut ball = Ball::new();
 
     let mut player_score: u32 = 0;
@@ -219,15 +224,28 @@ async fn main() {
     let mut state = GameState::Menu;
 
     loop {
-        if state == GameState::Playing {
-            paddle.update(KeyCode::W, KeyCode::S);
-            opponent.follow(ball.y);
-            ball.update(&mut player_score, &mut opponent_score);
-            ball.bounce_off(&paddle);
-            ball.bounce_off(&opponent);
+        let pause_pressed = is_key_pressed(KeyCode::P) || is_key_pressed(KeyCode::Escape);
 
-            if player_score >= WIN_SCORE || opponent_score >= WIN_SCORE {
-                state = GameState::GameOver;
+        if state == GameState::Playing {
+            if pause_pressed {
+                state = GameState::Paused;
+            } else {
+                paddle.update(KeyCode::W, KeyCode::S);
+                opponent.follow(ball.y);
+                ball.update(&mut player_score, &mut opponent_score);
+                ball.bounce_off(&paddle);
+                ball.bounce_off(&opponent);
+
+                if player_score >= WIN_SCORE || opponent_score >= WIN_SCORE {
+                    state = GameState::GameOver;
+                }
+            }
+        } else if state == GameState::Paused {
+            if pause_pressed {
+                state = GameState::Playing;
+            } else if is_key_pressed(KeyCode::Q) {
+                // End the game and go back to the menu.
+                state = GameState::Menu;
             }
         } else if is_key_pressed(KeyCode::Space) {
             // From the menu or the game-over screen: start a fresh game.
@@ -258,14 +276,25 @@ async fn main() {
         paddle.draw();
         opponent.draw();
 
-        // The ball only shows while playing, so it never sits behind the menu text.
-        if state == GameState::Playing {
+        // The ball shows while playing or paused, never behind the menu text.
+        if state == GameState::Playing || state == GameState::Paused {
             ball.draw();
         }
 
         match state {
             GameState::Menu => draw_message("PONG", "Press SPACE to start"),
             GameState::GameOver => draw_message("GAME OVER", "Press SPACE to restart"),
+            GameState::Paused => {
+                // Dim the frozen game so the pause text is easy to read.
+                draw_rectangle(
+                    0.0,
+                    0.0,
+                    screen_width(),
+                    screen_height(),
+                    Color::new(0.0, 0.0, 0.0, 0.7),
+                );
+                draw_message("PAUSED", "P: resume    Q: end game");
+            }
             GameState::Playing => {}
         }
 

@@ -21,7 +21,13 @@ Pong written in Rust with macroquad. You play the left paddle against a computer
 
 Play in the browser: https://sks-0212.github.io/pong/
 
-Controls: W and S move your paddle. Space starts a game and restarts after game over.
+Controls:
+
+- **W** and **S** move your paddle.
+- **Space** starts a game from the menu, and starts a new one after game over.
+- **P** or **Escape** pauses the game. Press either one again to resume.
+- **Q** while paused ends the game and goes back to the menu.
+- To quit the program, close the window. In the browser, close or leave the tab.
 
 To build the browser version yourself, add the web target, build, and serve the `web` folder with the compiled file saved as `game.wasm`:
 
