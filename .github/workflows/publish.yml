@@ -1,0 +1,134 @@
+# TIER W (web + downloads) for macroquad games.
+# Copy to .github/workflows/publish.yml in the game repository.
+#
+# Push to main  -> checks the wasm build and publishes the browser version to GitHub Pages.
+# Push a v* tag -> builds Windows, Linux and macOS zips and attaches them to a release.
+#
+# Needs web/index.html and web/mq_js_bundle.js committed in the repository.
+# The loader is committed (not downloaded in CI) so a third party cannot change your build.
+# Use the copy that matches your macroquad version, and re-check it when you upgrade.
+#
+# Bevy or wgpu games need a different web job (trunk or wasm-bindgen).
+
+name: Publish game
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  web:
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check the web loader is committed
+        run: |
+          test -f web/index.html || { echo "web/index.html is missing"; exit 1; }
+          test -f web/mq_js_bundle.js || { echo "web/mq_js_bundle.js is missing. Commit the loader that matches your macroquad version."; exit 1; }
+
+      - name: Build wasm
+        run: cargo build --release --target wasm32-unknown-unknown --locked
+
+      - name: Assemble site
+        shell: bash
+        run: |
+          NAME=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
+          mkdir -p site
+          cp web/index.html web/mq_js_bundle.js site/
+          cp "target/wasm32-unknown-unknown/release/${NAME}.wasm" site/game.wasm
+          if [ -d assets ]; then cp -r assets site/assets; fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  native:
+    if: github.ref_type == 'tag'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+            ext: ""
+          - os: windows-latest
+            label: windows
+            ext: ".exe"
+          - os: macos-latest
+            label: macos
+            ext: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux build libraries
+        if: matrix.label == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libx11-dev libxi-dev libgl1-mesa-dev
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Package
+        shell: bash
+        run: |
+          NAME=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')
+          mkdir -p package
+          cp "target/release/${NAME}${{ matrix.ext }}" package/
+          if [ -d assets ]; then cp -r assets package/assets; fi
+          cd package
+          if [ "${{ matrix.label }}" = "windows" ]; then
+            7z a "../${NAME}-${{ matrix.label }}.zip" .
+          else
+            zip -r "../${NAME}-${{ matrix.label }}.zip" .
+          fi
+          echo "ARCHIVE=${NAME}-${{ matrix.label }}.zip" >> "$GITHUB_ENV"
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE }}
+          generate_release_notes: true
+
+  notify:
+    needs: [web, native]
+    if: ${{ always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tell the portfolio to rebuild
+        env:
+          TOKEN: ${{ secrets.PORTFOLIO_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "PORTFOLIO_DISPATCH_TOKEN is not set. The portfolio will pick this up on its next scheduled build."
+            exit 0
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/SKS-0212/SKS-0212.github.io/dispatches \
+            -d '{"event_type":"game-updated"}'

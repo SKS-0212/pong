@@ -1,0 +1,5 @@
+# Keep the vendored JS loader out of GitHub's language statistics,
+# so the repository is still detected as Rust.
+web/mq_js_bundle.js linguist-vendored
+web/*.js linguist-vendored
+web/*.html linguist-documentation
