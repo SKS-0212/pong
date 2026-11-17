@@ -2,6 +2,7 @@ use macroquad::prelude::*;
 
 const PADDLE_WIDTH: f32 = 20.0;
 const PADDLE_HEIGHT: f32 = 80.0;
+const BALL_RADIUS: f32 = 10.0;
 
 #[derive(Debug)]
 struct Paddle {
@@ -55,19 +56,10 @@ struct Ball {
 }
 
 impl Ball {
-    fn update(&mut self) {
+    fn update(&mut self, player_score: &mut u32, opponent_score: &mut u32) {
         self.x = self.x + self.vx * get_frame_time();
         self.y = self.y + self.vy * get_frame_time();
 
-        if self.x - self.radius < 0.0 {
-            self.x = self.radius;
-            self.vx = -self.vx;
-        }
-
-        if self.x + self.radius > screen_width() {
-            self.x = screen_width() - self.radius;
-            self.vx = -self.vx;
-        }
 
         if self.y - self.radius < 0.0 {
             self.y = self.radius;
@@ -77,6 +69,16 @@ impl Ball {
         if self.y + self.radius > screen_height() {
             self.y = screen_height() - self.radius;
             self.vy = -self.vy;
+        }
+
+        if self.x > screen_width(){
+            *player_score += 1;
+            self.reset();
+        }
+
+        if self.x < 0.0{
+            *opponent_score += 1;
+            self.reset();
         }
     }
 
@@ -105,8 +107,17 @@ impl Ball {
 
             }
 
+            self.vx = self.vx * 1.1;
+            self.vy = self.vy * 1.1;
 
         }
+    }
+
+    fn reset(&mut self){
+        self.x = (screen_width() - self.radius)/2.0;
+        self.y = (screen_height() - self.radius)/2.0;
+        self.vx = 150.0;
+        self.vy = 100.0;
     }
 }
 
@@ -135,11 +146,11 @@ async fn main() {
     };
 
     let mut ball = Ball {
-        x: 0.0,
-        y: 0.0,
+        x : (screen_width() - BALL_RADIUS)/2.0,
+        y : (screen_height() - BALL_RADIUS)/2.0,
         vx: 150.0,
         vy: 100.0,
-        radius: 10.0,
+        radius: BALL_RADIUS,
     };
 
     let mut opponent = Paddle{
@@ -150,14 +161,20 @@ async fn main() {
         speed: 200.0
     };
 
+    let mut player_score: u32 = 0;
+    let mut opponent_score: u32 = 0;
+
+
     loop {
         paddle.update(KeyCode::W, KeyCode::S);
         opponent.follow(ball.y);
-        ball.update();
+        ball.update(&mut player_score, &mut opponent_score);
         ball.bounce_off(&paddle);
         ball.bounce_off(&opponent);
 
         clear_background(BLACK);
+        draw_text(format!("{}",player_score),   200.0, 40.0, 40.0, WHITE);
+        draw_text(format!("{}",opponent_score),   screen_width() - 200.0, 40.0, 40.0, WHITE);
         paddle.draw();
         opponent.draw();
         ball.draw();
